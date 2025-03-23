@@ -26,10 +26,12 @@ private:
 
 	VkInstance vulkanInstance = VK_NULL_HANDLE;
 	VkPhysicalDevice vulkanPhysicalDevice = VK_NULL_HANDLE;
+	VkDevice vulkanLogicalDevice = VK_NULL_HANDLE;
+	VkQueue deviceGraphicsQueue = VK_NULL_HANDLE;
+	// Validation layers are now common for instance and devices:
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
 	};
-
 #ifdef NDEBUG 
 	// Release Mode:
 	const bool enableVulkanValidationLayers = false;
@@ -39,7 +41,7 @@ private:
 #endif        
 
 
-	// Methods:
+	// Member Methods:
 	void initWindow();
 	void initVulkan();	
 	void mainLoop();
@@ -48,6 +50,7 @@ private:
 	// Helper Methods:
 	void createVulkanInstance();
 	void pickVulkanPhysicalDevice();
+	void createLogicalDevice();
 	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
 	bool checkValidationLayersSupport();
@@ -57,6 +60,7 @@ private:
 
 // Struct definitions:
 
+/// @brief Custom struct that holds the queue indices for various device queue families.
 struct QueueFamilyIndices {
 	std::optional<uint32_t> graphicsFamily;
 

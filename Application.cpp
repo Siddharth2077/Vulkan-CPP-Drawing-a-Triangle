@@ -21,6 +21,7 @@ void Application::initWindow() {
 void Application::initVulkan() {
 	createVulkanInstance();
 	pickVulkanPhysicalDevice();
+	createLogicalDevice();
 }
 
 void Application::mainLoop() {
@@ -31,6 +32,7 @@ void Application::mainLoop() {
 
 void Application::cleanup() {
 	// Destroy Vulkan instance just before the program terminates
+	vkDestroyDevice(vulkanLogicalDevice, nullptr);
 	vkDestroyInstance(vulkanInstance, nullptr);
 	glfwDestroyWindow(window);
 	glfwTerminate();
@@ -73,7 +75,6 @@ void Application::createVulkanInstance() {
 	for (const VkExtensionProperties& extensionProperty : vulkanExtensions) {
 		std::cout << "\t" << extensionProperty.extensionName << " (version: " << extensionProperty.specVersion << ")" << std::endl;
 	}
-	std::cout << std::endl;
 
 	// List down all the GLFW extensions required for Vulkan
 	std::cout << "DEBUG LOG: Required GLFW Extensions for Vulkan:" << std::endl;
@@ -146,8 +147,54 @@ void Application::pickVulkanPhysicalDevice() {
 #else
 	// Debug Mode:
 	vkGetPhysicalDeviceProperties(vulkanPhysicalDevice, &physicalDeviceProperties);
-	std::cout << "> Picked the physical device (GPU): '" << physicalDeviceProperties.deviceName << "'" << std::endl;
+	std::cout << "> Vulkan picked the physical device (GPU): '" << physicalDeviceProperties.deviceName << "'" << std::endl;
 #endif
+
+}
+
+void Application::createLogicalDevice() {
+	// Logical Device is created based on the Physical Device selected
+	if (vulkanPhysicalDevice == VK_NULL_HANDLE) {
+		throw std::runtime_error("RUNTIME ERROR: Unable to create Vulkan logical device! Physical device is NULL or hasn't been created yet...");
+	}
+	// Get the actual indices of the queue families that we'll need (in this case Graphics queue)
+	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vulkanPhysicalDevice);
+
+	// Specify to Vulkan which Queues must be created and how many of them, along with the priority of each queue
+	float queuePriority{ 1.0f };
+	VkDeviceQueueCreateInfo queueCreateInfo{};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	queueCreateInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+	queueCreateInfo.queueCount = 1;
+	queueCreateInfo.pQueuePriorities = &queuePriority;
+
+	// Specifying the physical device features we'll be using (eg. geometry shader) [TODO Will be coming back to this later]
+	VkPhysicalDeviceFeatures physicalDeviceFeatures{};
+
+	// Specify how to create the Logical Device to Vulkan
+	VkDeviceCreateInfo createDeviceInfo{};
+	createDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	createDeviceInfo.pQueueCreateInfos = &queueCreateInfo;
+	createDeviceInfo.queueCreateInfoCount = 1;
+	createDeviceInfo.pEnabledFeatures = &physicalDeviceFeatures;
+	createDeviceInfo.enabledExtensionCount = 0;
+	createDeviceInfo.enabledLayerCount = 0;
+	if (enableVulkanValidationLayers) {
+		createDeviceInfo.enabledLayerCount = static_cast<uint32_t>(vulkanValidationLayers.size());
+		createDeviceInfo.ppEnabledLayerNames = vulkanValidationLayers.data();
+	}
+
+	// Create the Logical Device
+	VkResult result = vkCreateDevice(vulkanPhysicalDevice, &createDeviceInfo, nullptr, &vulkanLogicalDevice);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create Vulkan logical device!");
+	}
+
+	// Logical Device is successfully created...
+	std::cout << "> Vulkan logical device successfully created." << std::endl;
+
+	// Get the queue handles:
+	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.graphicsFamily.value(), 0, &deviceGraphicsQueue);
 
 }
 
