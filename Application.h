@@ -7,7 +7,12 @@
 #include <cstring>
 #include <cstdlib>
 #include <vector>
+#include <optional>
 
+// Forward declarations
+struct QueueFamilyIndices;
+
+// APPLICATION CLASS
 class Application {
 public:
 	void run();
@@ -19,7 +24,8 @@ private:
 	const uint32_t HEIGHT{ 600 };
 	const char* APPLICATION_NAME = "Vulkan Application";
 
-	VkInstance vulkanInstance;
+	VkInstance vulkanInstance = VK_NULL_HANDLE;
+	VkPhysicalDevice vulkanPhysicalDevice = VK_NULL_HANDLE;
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
 	};
@@ -35,13 +41,27 @@ private:
 
 	// Methods:
 	void initWindow();
-	void initVulkan();
-	void createVulkanInstance();
+	void initVulkan();	
 	void mainLoop();
 	void cleanup();
 
 	// Helper Methods:
+	void createVulkanInstance();
+	void pickVulkanPhysicalDevice();
+	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
 	bool checkValidationLayersSupport();
 
+};
+
+
+// Struct definitions:
+
+struct QueueFamilyIndices {
+	std::optional<uint32_t> graphicsFamily;
+
+	bool isComplete() {
+		return graphicsFamily.has_value();
+	}
 };
 
