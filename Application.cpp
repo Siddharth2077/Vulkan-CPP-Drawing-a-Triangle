@@ -20,6 +20,7 @@ void Application::initWindow() {
 
 void Application::initVulkan() {
 	createVulkanInstance();
+	createVulkanSurface();
 	pickVulkanPhysicalDevice();
 	createLogicalDevice();
 }
@@ -33,10 +34,13 @@ void Application::mainLoop() {
 void Application::cleanup() {
 	// Destroy Vulkan instance just before the program terminates
 	vkDestroyDevice(vulkanLogicalDevice, nullptr);
+	vkDestroySurfaceKHR(vulkanInstance, vulkanSurface, nullptr);
 	vkDestroyInstance(vulkanInstance, nullptr);
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
+
+
 
 void Application::createVulkanInstance() {
 	// Check if validation layers were enabled. If so, check if they're all supported
@@ -114,6 +118,13 @@ void Application::createVulkanInstance() {
 
 }
 
+void Application::createVulkanSurface() {
+	VkResult result = glfwCreateWindowSurface(vulkanInstance, window, nullptr, &vulkanSurface);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create Vulkan surface!");
+	}
+}
+
 void Application::pickVulkanPhysicalDevice() {
 	// Get the list of physical devices (GPUs) available in the system that support Vulkan
 	uint32_t physicalDevicesCount{};
@@ -161,23 +172,32 @@ void Application::createLogicalDevice() {
 	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vulkanPhysicalDevice);
 
 	// Specify to Vulkan which Queues must be created and how many of them, along with the priority of each queue
-	float queuePriority{ 1.0f };
-	VkDeviceQueueCreateInfo queueCreateInfo{};
-	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queueCreateInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
-	queueCreateInfo.queueCount = 1;
-	queueCreateInfo.pQueuePriorities = &queuePriority;
+	std::set<uint32_t> requiredQueueFamilies = {queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentationFamily.value()};
+	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos {};
 
-	// Specifying the physical device features we'll be using (eg. geometry shader) [TODO Will be coming back to this later]
+	float queuePriority{ 1.0f };
+	for (uint32_t queueFamily : requiredQueueFamilies) {
+		// Create a Vulkan queue create info struct for each queue family
+		VkDeviceQueueCreateInfo queueCreateInfo{};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = queueFamily;
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+		// Append the struct to the vector of queue create info structs (pushes a copy)
+		queueCreateInfos.push_back(queueCreateInfo);
+	}
+
+	// Specifying the physical device features we'll be using (eg. geometry shader)
 	VkPhysicalDeviceFeatures physicalDeviceFeatures{};
 
 	// Specify how to create the Logical Device to Vulkan
 	VkDeviceCreateInfo createDeviceInfo{};
 	createDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	createDeviceInfo.pQueueCreateInfos = &queueCreateInfo;
-	createDeviceInfo.queueCreateInfoCount = 1;
+	createDeviceInfo.pQueueCreateInfos = queueCreateInfos.data();
+	createDeviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 	createDeviceInfo.pEnabledFeatures = &physicalDeviceFeatures;
-	createDeviceInfo.enabledExtensionCount = 0;
+	createDeviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
+	createDeviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 	createDeviceInfo.enabledLayerCount = 0;
 	if (enableVulkanValidationLayers) {
 		createDeviceInfo.enabledLayerCount = static_cast<uint32_t>(vulkanValidationLayers.size());
@@ -195,13 +215,16 @@ void Application::createLogicalDevice() {
 
 	// Get the queue handles:
 	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.graphicsFamily.value(), 0, &deviceGraphicsQueue);
+	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.presentationFamily.value(), 0, &devicePresentationQueue);
+	std::cout << "> Retrieved queue handles." << std::endl;
 
 }
 
 bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {
 	// We're deeming a GPU as suitable if it has the Queue Families that we need (eg. Graphics family)
 	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-	return indices.isComplete();
+	bool deviceExtensionsSupported = checkPhysicalDeviceExtensionsSupport(physicalDevice);
+	return indices.isComplete() && deviceExtensionsSupported;
 }
 
 QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physicalDevice) {
@@ -216,10 +239,20 @@ QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physicalDevic
 	// Need to find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
 	size_t i{ 0 };
 	for (const auto& queueFamily: queueFamilies) {
-		if (indices.isComplete())
-			break;
+		// Check for presentation support by the queue family
+		VkBool32 presentationSupport{ false };
+		vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, vulkanSurface, &presentationSupport);
+
+		// Check if queue family supports graphics queue
 		if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 			indices.graphicsFamily = i;
+		}
+		// If current queue family supports presentation, set its family index
+		if (presentationSupport) {
+			indices.presentationFamily = i;
+		}	
+		if (indices.isComplete()) {
+			// All required queues were found
 			break;
 		}
 		++i;
@@ -254,5 +287,24 @@ bool Application::checkValidationLayersSupport() {
 
 	// All requested validation layers were found
 	return true;
+}
+
+bool Application::checkPhysicalDeviceExtensionsSupport(VkPhysicalDevice physicalDevice) {
+	// Get the available device extensions
+	uint32_t availableExtensionsCount{};
+	vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &availableExtensionsCount, nullptr);
+	std::vector<VkExtensionProperties> availableExtensions(availableExtensionsCount);
+	vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &availableExtensionsCount, availableExtensions.data());
+
+	// Create a set of required extensions (copies unique contents from deviceExtensions member and stores)
+	std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+	// Tick off all the required extensions that are already there
+	for (const auto& extension : availableExtensions) {
+		requiredExtensions.erase(extension.extensionName);
+	}
+
+	// Return true if all the required extensions are already existing (set is empty; everything ticked off)
+	return requiredExtensions.empty();
 }
 
