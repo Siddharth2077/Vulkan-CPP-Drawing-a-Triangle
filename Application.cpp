@@ -1,12 +1,14 @@
 
 #include "Application.h"
 
+
 void Application::run() {
 	initWindow();
 	initVulkan();
 	mainLoop();
 	cleanup();
 }
+
 
 void Application::initWindow() {
 	glfwInit();
@@ -39,7 +41,6 @@ void Application::cleanup() {
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
-
 
 
 void Application::createVulkanInstance() {
@@ -224,7 +225,14 @@ bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {
 	// We're deeming a GPU as suitable if it has the Queue Families that we need (eg. Graphics family)
 	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 	bool deviceExtensionsSupported = checkPhysicalDeviceExtensionsSupport(physicalDevice);
-	return indices.isComplete() && deviceExtensionsSupported;
+	bool swapChainSupportAdequate{ false };
+	if (deviceExtensionsSupported) {
+		SwapChainSupportDetails swapChainSupportDetails = querySwapChainSupport(physicalDevice);
+		// If we have atleast 1 surface format and 1 presentation mode supported, thats adequate for now
+		swapChainSupportAdequate = !swapChainSupportDetails.surfaceFormats.empty() && !swapChainSupportDetails.presentationModes.empty();
+	}
+	// IMPORTANT: Need to check for 'swapChainSupportAdequate' AFTER 'deviceExtensionsSupported' due to the way AND conditions work
+	return indices.isComplete() && deviceExtensionsSupported && swapChainSupportAdequate;
 }
 
 QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physicalDevice) {
@@ -259,6 +267,74 @@ QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physicalDevic
 	}
 
 	return indices;
+}
+
+SwapChainSupportDetails Application::querySwapChainSupport(VkPhysicalDevice physicalDevice) {
+	SwapChainSupportDetails swapchainSupportDetails{};
+
+	// Get the surface capabilities of the physical device
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, vulkanSurface, &swapchainSupportDetails.surfaceCapabilities);
+
+	// Get the supported surface formats by the physical device
+	uint32_t surfaceFormatsCount{};
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, vulkanSurface, &surfaceFormatsCount, nullptr);
+	if (surfaceFormatsCount != 0) {
+		swapchainSupportDetails.surfaceFormats.resize(surfaceFormatsCount);
+	}
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, vulkanSurface, &surfaceFormatsCount, swapchainSupportDetails.surfaceFormats.data());
+
+	// Get the supported presentation modes by the physical device
+	uint32_t presentationModesCount{};
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, vulkanSurface, &presentationModesCount, nullptr);
+	if (presentationModesCount != 0) {
+		swapchainSupportDetails.presentationModes.resize(presentationModesCount);
+	}
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, vulkanSurface, &presentationModesCount, swapchainSupportDetails.presentationModes.data());
+
+	return swapchainSupportDetails;
+}
+
+VkSurfaceFormatKHR Application::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableSurfaceFormats) {
+	for (const VkSurfaceFormatKHR& availableSurfaceFormat : availableSurfaceFormats) {
+		// We'd prefer to have the BGR (8-bit) format and the SRGB non linear color space for our surface
+		if (availableSurfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableSurfaceFormat.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR) {
+			// If supported, return it
+			return availableSurfaceFormat;
+		}
+	}
+	// Desired format not supported (return the first supported one)
+	// Can go deeper and perform ranking of the available formats and colorspaces to pick the best too...
+	return availableSurfaceFormats.at(0);
+}
+
+VkPresentModeKHR Application::chooseSwapPresentationMode(const std::vector<VkPresentModeKHR>& availablePresentationModes) {
+	// We'll prefer the MAILBOX presentation mode (suitable for desktop apps, but not for mobile apps due to power consumption & wastage of images)
+	for (const VkPresentModeKHR& presentationMode : availablePresentationModes) {
+		if (presentationMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			return presentationMode;
+		}
+	}
+	// FIFO is guaranteed to exist, if we couldn't find the best one
+	return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D Application::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities) {
+	if (surfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+		// If its not max, that means the GPU requires a fixed width & height for the swapchain (eg: mobile GPUs)
+		return surfaceCapabilities.currentExtent;
+	}
+	int width{};
+	int height{};
+	glfwGetFramebufferSize(window, &width, &height);
+
+	VkExtent2D actualExtent = {
+		static_cast<uint32_t>(width),
+		static_cast<uint32_t>(height)
+	};
+	actualExtent.width = std::clamp(actualExtent.width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+	actualExtent.height = std::clamp(actualExtent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
+
+	return actualExtent;
 }
 
 /// @brief Checks if all the validation layers requested are supported by Vulkan or not.
