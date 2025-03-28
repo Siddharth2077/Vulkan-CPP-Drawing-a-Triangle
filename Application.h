@@ -63,6 +63,7 @@ private:
 	void createVulkanSurface();
 	void pickVulkanPhysicalDevice();
 	void createLogicalDevice();
+	void createSwapChain();
 	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice physicalDevice);

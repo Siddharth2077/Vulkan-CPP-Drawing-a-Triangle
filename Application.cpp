@@ -25,6 +25,7 @@ void Application::initVulkan() {
 	createVulkanSurface();
 	pickVulkanPhysicalDevice();
 	createLogicalDevice();
+	createSwapChain();
 }
 
 void Application::mainLoop() {
@@ -218,6 +219,31 @@ void Application::createLogicalDevice() {
 	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.graphicsFamily.value(), 0, &deviceGraphicsQueue);
 	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.presentationFamily.value(), 0, &devicePresentationQueue);
 	std::cout << "> Retrieved queue handles." << std::endl;
+
+}
+
+void Application::createSwapChain() {
+	// Get supported swapchain properties from the physical device (GPU)
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vulkanPhysicalDevice);
+
+	// Choose and set the desired properties of our swapchain
+	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.surfaceFormats);
+	VkPresentModeKHR presentationMode = chooseSwapPresentationMode(swapChainSupport.presentationModes);
+	VkExtent2D swapExtent = chooseSwapExtent(swapChainSupport.surfaceCapabilities);
+
+	// We would like one image more than the min supported images in the swapchain by the device (ensured that its clamped)
+	uint32_t swapChainImagesCount = std::clamp(swapChainSupport.surfaceCapabilities.minImageCount + 1, swapChainSupport.surfaceCapabilities.minImageCount, swapChainSupport.surfaceCapabilities.maxImageCount);
+
+	// Create the SwapChain:
+	VkSwapchainCreateInfoKHR swapChainCreateInfo{};
+	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapChainCreateInfo.surface = vulkanSurface;
+	swapChainCreateInfo.minImageCount = swapChainImagesCount;
+	swapChainCreateInfo.imageFormat = surfaceFormat.format;
+	swapChainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
+	swapChainCreateInfo.imageExtent = swapExtent;
+	swapChainCreateInfo.imageArrayLayers = 1;  // Layers in each image (will always be 1, unless building a stereoscopic 3D application)
+	swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 }
 
