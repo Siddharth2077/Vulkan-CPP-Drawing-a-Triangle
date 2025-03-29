@@ -36,6 +36,7 @@ void Application::mainLoop() {
 
 void Application::cleanup() {
 	// Destroy Vulkan instance just before the program terminates
+	vkDestroySwapchainKHR(vulkanLogicalDevice, vulkanSwapChain, nullptr);
 	vkDestroyDevice(vulkanLogicalDevice, nullptr);
 	vkDestroySurfaceKHR(vulkanInstance, vulkanSurface, nullptr);
 	vkDestroyInstance(vulkanInstance, nullptr);
@@ -47,11 +48,11 @@ void Application::cleanup() {
 void Application::createVulkanInstance() {
 	// Check if validation layers were enabled. If so, check if they're all supported
 	if (enableVulkanValidationLayers == true) {
-		std::cout << "> Vulkan validation layers requested." << std::endl;
+		std::cout << "> Vulkan validation layers requested.\n";
 		if (!checkValidationLayersSupport())
 			throw std::runtime_error("RUNTIME ERROR: Not all validation layers requested are available!");
 		else
-			std::cout << "> All requested validation layers are supported." << std::endl;
+			std::cout << "> All requested validation layers are supported.\n";
 	}
 
 	// [Optional struct] Provides metadata of the application
@@ -77,26 +78,26 @@ void Application::createVulkanInstance() {
 	vkEnumerateInstanceExtensionProperties(nullptr, &vulkanExtensionsCount, nullptr);
 	std::vector<VkExtensionProperties> vulkanExtensions(vulkanExtensionsCount);
 	vkEnumerateInstanceExtensionProperties(nullptr, &vulkanExtensionsCount, vulkanExtensions.data());
-	std::cout << "DEBUG LOG: Available Vulkan Extensions:" << std::endl;
+	std::cout << "DEBUG LOG: Available Vulkan Extensions:\n";
 	for (const VkExtensionProperties& extensionProperty : vulkanExtensions) {
-		std::cout << "\t" << extensionProperty.extensionName << " (version: " << extensionProperty.specVersion << ")" << std::endl;
+		std::cout << "\t" << extensionProperty.extensionName << " (version: " << extensionProperty.specVersion << ")\n";
 	}
 
 	// List down all the GLFW extensions required for Vulkan
-	std::cout << "DEBUG LOG: Required GLFW Extensions for Vulkan:" << std::endl;
+	std::cout << "DEBUG LOG: Required GLFW Extensions for Vulkan:\n";
 	bool glfwExtensionFound{ false };
 	for (int i{ 0 }; i < glfwExtensionsCount; i++) {
 		std::cout << "\t" << glfwExtensionNames[i];
 		// Print if the GLFW extensions are available in the Vulkan instance extensions
 		for (const VkExtensionProperties& extensionProperty : vulkanExtensions) {
 			if (strcmp(extensionProperty.extensionName, glfwExtensionNames[i]) == 0) {
-				std::cout << " - (SUPPORTED BY VULKAN INSTANCE)" << std::endl;
+				std::cout << " - (SUPPORTED BY VULKAN INSTANCE)\n";
 				glfwExtensionFound = true;
 				break;
 			}
 		}
 		if (!glfwExtensionFound) {
-			std::cout << "\t(!UNSUPPORTED!)" << std::endl;
+			std::cout << "\t(!UNSUPPORTED!)\n";
 			glfwExtensionFound = false;
 			throw std::runtime_error("RUNTIME ERROR: Unsupported GLFW extensions found!");
 		}
@@ -116,7 +117,7 @@ void Application::createVulkanInstance() {
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to create Vulkan instance!");
 	}
-	std::cout << "> Vulkan instance created successfully." << std::endl;
+	std::cout << "> Vulkan instance created successfully.\n";
 
 }
 
@@ -160,7 +161,7 @@ void Application::pickVulkanPhysicalDevice() {
 #else
 	// Debug Mode:
 	vkGetPhysicalDeviceProperties(vulkanPhysicalDevice, &physicalDeviceProperties);
-	std::cout << "> Vulkan picked the physical device (GPU): '" << physicalDeviceProperties.deviceName << "'" << std::endl;
+	std::cout << "> Vulkan picked the physical device (GPU): '" << physicalDeviceProperties.deviceName << "'\n";
 #endif
 
 }
@@ -213,16 +214,21 @@ void Application::createLogicalDevice() {
 	}
 
 	// Logical Device is successfully created...
-	std::cout << "> Vulkan logical device successfully created." << std::endl;
+	std::cout << "> Vulkan logical device successfully created.\n";
 
 	// Get the queue handles:
 	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.graphicsFamily.value(), 0, &deviceGraphicsQueue);
 	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.presentationFamily.value(), 0, &devicePresentationQueue);
-	std::cout << "> Retrieved queue handles." << std::endl;
+	std::cout << "> Retrieved queue handles.\n";
 
 }
 
 void Application::createSwapChain() {
+	// Safety Check (although will never reach here)
+	if (vulkanPhysicalDevice == VK_NULL_HANDLE) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create SwapChain! Physical Device is NULL.");
+	}
+
 	// Get supported swapchain properties from the physical device (GPU)
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vulkanPhysicalDevice);
 
@@ -234,7 +240,7 @@ void Application::createSwapChain() {
 	// We would like one image more than the min supported images in the swapchain by the device (ensured that its clamped)
 	uint32_t swapChainImagesCount = std::clamp(swapChainSupport.surfaceCapabilities.minImageCount + 1, swapChainSupport.surfaceCapabilities.minImageCount, swapChainSupport.surfaceCapabilities.maxImageCount);
 
-	// Create the SwapChain:
+	// Specify how to create the SwapChain:
 	VkSwapchainCreateInfoKHR swapChainCreateInfo{};
 	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapChainCreateInfo.surface = vulkanSurface;
@@ -244,6 +250,36 @@ void Application::createSwapChain() {
 	swapChainCreateInfo.imageExtent = swapExtent;
 	swapChainCreateInfo.imageArrayLayers = 1;  // Layers in each image (will always be 1, unless building a stereoscopic 3D application)
 	swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	// Need to specify how to handle swapchain images that will be used across multiple queue families (eg: graphics & presentation queues)
+	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vulkanPhysicalDevice);
+	uint32_t indices[] = { queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentationFamily.value()};
+	if (queueFamilyIndices.graphicsFamily.value() != queueFamilyIndices.presentationFamily.value()) {
+		// The graphics and presentation families are different
+		// We'll go with CONCURRENT mode (less efficient but Vulkan automatically handles resource sharing and ownership transfer)
+		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		swapChainCreateInfo.pQueueFamilyIndices = indices;
+		swapChainCreateInfo.queueFamilyIndexCount = 2;
+
+	} else {
+		// The graphics and presentation families are the same
+		// Go with EXCLUSIVE mode (most efficient and best performance)
+		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		swapChainCreateInfo.pQueueFamilyIndices = nullptr;  // optional
+		swapChainCreateInfo.queueFamilyIndexCount = 0;      // optional
+	}
+	// Not applying any pre-transform to swapchain images (used in mobile applications)
+	swapChainCreateInfo.preTransform = swapChainSupport.surfaceCapabilities.currentTransform;
+	swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;  // No blending with other windows in the window system
+	swapChainCreateInfo.presentMode = presentationMode;
+	swapChainCreateInfo.clipped = VK_TRUE;  // Don't care about pixels that are obscured by say, other windows for example
+	swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;  // Swapchain might be unoptimized over time, recreating required. Specify the old one here.
+
+	// Create the SwapChain:
+	VkResult result = vkCreateSwapchainKHR(vulkanLogicalDevice, &swapChainCreateInfo, nullptr, &vulkanSwapChain);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create the SwapChain!");
+	}
+	std::cout << "> Vulkan swap-chain created successfully.\n";
 
 }
 

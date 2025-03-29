@@ -34,6 +34,7 @@ private:
 	VkQueue deviceGraphicsQueue = VK_NULL_HANDLE;
 	VkQueue devicePresentationQueue = VK_NULL_HANDLE;
 	VkSurfaceKHR vulkanSurface = VK_NULL_HANDLE;
+	VkSwapchainKHR vulkanSwapChain = VK_NULL_HANDLE;
 	// Validation layers are now common for instance and devices:
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
