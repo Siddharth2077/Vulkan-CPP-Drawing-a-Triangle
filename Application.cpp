@@ -228,6 +228,9 @@ void Application::createSwapChain() {
 	if (vulkanPhysicalDevice == VK_NULL_HANDLE) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to create SwapChain! Physical Device is NULL.");
 	}
+	if (vulkanLogicalDevice == VK_NULL_HANDLE) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create SwapChain! Logical Device is NULL.");
+	}
 
 	// Get supported swapchain properties from the physical device (GPU)
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(vulkanPhysicalDevice);
@@ -279,7 +282,18 @@ void Application::createSwapChain() {
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to create the SwapChain!");
 	}
-	std::cout << "> Vulkan swap-chain created successfully.\n";
+	std::cout << "> Vulkan swapchain created successfully.\n";
+
+	// Store the swapchain image-format and extent in member variables:
+	vulkanSwapChainImageFormat = surfaceFormat.format;
+	vulkanSwapChainImageColorspace = surfaceFormat.colorSpace;
+	vulkanSwapChainExtent = swapExtent;
+
+	// Retrieve the handles to the swapchain images
+	vkGetSwapchainImagesKHR(vulkanLogicalDevice, vulkanSwapChain, &swapChainImagesCount, nullptr);
+	vulkanSwapChainImages.resize(swapChainImagesCount);
+	vkGetSwapchainImagesKHR(vulkanLogicalDevice, vulkanSwapChain, &swapChainImagesCount, vulkanSwapChainImages.data());
+	std::cout << "> Retrieved SwapChain image handles.\n";
 
 }
 
