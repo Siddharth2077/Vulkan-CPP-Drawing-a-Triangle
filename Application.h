@@ -39,6 +39,7 @@ private:
 	VkColorSpaceKHR vulkanSwapChainImageColorspace;
 	VkExtent2D vulkanSwapChainExtent;
 	std::vector<VkImage> vulkanSwapChainImages;
+	std::vector<VkImageView> vulkanSwapChainImageViews;
 	// Validation layers are now common for instance and devices:
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
@@ -69,6 +70,7 @@ private:
 	void pickVulkanPhysicalDevice();
 	void createLogicalDevice();
 	void createSwapChain();
+	void createSwapChainImageViews();
 	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice physicalDevice);

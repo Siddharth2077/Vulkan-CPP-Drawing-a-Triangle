@@ -26,6 +26,7 @@ void Application::initVulkan() {
 	pickVulkanPhysicalDevice();
 	createLogicalDevice();
 	createSwapChain();
+	createSwapChainImageViews();
 }
 
 void Application::mainLoop() {
@@ -35,10 +36,14 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
-	// Destroy Vulkan instance just before the program terminates
+	// Destroy the swapchain image-views
+	for (VkImageView imageView : vulkanSwapChainImageViews) {
+		vkDestroyImageView(vulkanLogicalDevice, imageView, nullptr);
+	}
 	vkDestroySwapchainKHR(vulkanLogicalDevice, vulkanSwapChain, nullptr);
 	vkDestroyDevice(vulkanLogicalDevice, nullptr);
 	vkDestroySurfaceKHR(vulkanInstance, vulkanSurface, nullptr);
+	// Destroy Vulkan instance just before the program terminates
 	vkDestroyInstance(vulkanInstance, nullptr);
 	glfwDestroyWindow(window);
 	glfwTerminate();
@@ -293,8 +298,37 @@ void Application::createSwapChain() {
 	vkGetSwapchainImagesKHR(vulkanLogicalDevice, vulkanSwapChain, &swapChainImagesCount, nullptr);
 	vulkanSwapChainImages.resize(swapChainImagesCount);
 	vkGetSwapchainImagesKHR(vulkanLogicalDevice, vulkanSwapChain, &swapChainImagesCount, vulkanSwapChainImages.data());
-	std::cout << "> Retrieved SwapChain image handles.\n";
+	std::cout << "> Retrieved swapchain image handles.\n";
 
+}
+
+void Application::createSwapChainImageViews() {
+	// FResize the vector holding the image-views to fit the number of images
+	vulkanSwapChainImageViews.resize(vulkanSwapChainImages.size());
+	// Iterate through the swapchain images (not views)
+	for (size_t i{ 0 }; i < vulkanSwapChainImages.size(); i++) {
+		// Create the image-view for each swapchain image
+		VkImageViewCreateInfo imageViewCreateInfo{};
+		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCreateInfo.image = vulkanSwapChainImages.at(i);
+		imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCreateInfo.format = vulkanSwapChainImageFormat;
+		imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+		imageViewCreateInfo.subresourceRange.levelCount = 1;
+		imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+		imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+		VkResult result = vkCreateImageView(vulkanLogicalDevice, &imageViewCreateInfo, nullptr, &vulkanSwapChainImageViews.at(i));
+		if (result != VK_SUCCESS) {
+			throw std::runtime_error("RUNTIME ERROR: Failed to create image-views for swapchain images!");
+		}
+	}
+	std::cout << "> Created image-views for swapchain images successfully.\n";
 }
 
 bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {
