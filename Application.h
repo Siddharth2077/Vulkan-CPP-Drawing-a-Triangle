@@ -71,6 +71,7 @@ private:
 	void createLogicalDevice();
 	void createSwapChain();
 	void createSwapChainImageViews();
+	void createGraphicsPipeline();
 	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice physicalDevice);

@@ -331,6 +331,10 @@ void Application::createSwapChainImageViews() {
 	std::cout << "> Created image-views for swapchain images successfully.\n";
 }
 
+void Application::createGraphicsPipeline() {
+	// TODO
+}
+
 bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {
 	// We're deeming a GPU as suitable if it has the Queue Families that we need (eg. Graphics family)
 	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
