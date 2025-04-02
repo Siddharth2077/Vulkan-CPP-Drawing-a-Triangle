@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <fstream>
 #include <limits>
 #include <vector>
 #include <set>
@@ -80,6 +81,10 @@ private:
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities);
 	bool checkValidationLayersSupport();
 	bool checkPhysicalDeviceExtensionsSupport(VkPhysicalDevice physicalDevice);
+	VkShaderModule createShaderModule(const std::vector<char>& compiledShaderCode);
+
+	// static methods:
+	static std::vector<char> readFile(const std::string& fileName);
 
 };
 

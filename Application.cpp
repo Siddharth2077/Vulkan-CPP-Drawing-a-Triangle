@@ -27,6 +27,7 @@ void Application::initVulkan() {
 	createLogicalDevice();
 	createSwapChain();
 	createSwapChainImageViews();
+	createGraphicsPipeline();
 }
 
 void Application::mainLoop() {
@@ -332,7 +333,28 @@ void Application::createSwapChainImageViews() {
 }
 
 void Application::createGraphicsPipeline() {
-	// TODO
+	// Read in the compiled Vertex and Fragment shaders (Spir-V)
+	auto vertShaderCode = readFile("shaders/vert.spv");
+	auto fragShaderCode = readFile("shaders/frag.spv");
+
+	// Create the shader modules from the compiled shader code
+	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertShaderStageInfo.module = vertShaderModule;
+	vertShaderStageInfo.pName = "main";  // the entry point of the shader code
+
+	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStageInfo.module = fragShaderModule;
+	fragShaderStageInfo.pName = "main";  // the entry point of the shader code
+
+	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
 }
 
 bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {
@@ -496,5 +518,44 @@ bool Application::checkPhysicalDeviceExtensionsSupport(VkPhysicalDevice physical
 
 	// Return true if all the required extensions are already existing (set is empty; everything ticked off)
 	return requiredExtensions.empty();
+}
+
+/// @brief Creates and returns a VkShaderModule wrapper around the Spir-V compiled shader code.
+VkShaderModule Application::createShaderModule(const std::vector<char>& compiledShaderCode) {
+	VkShaderModuleCreateInfo shaderModuleCreateInfo{};
+	shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	shaderModuleCreateInfo.codeSize = compiledShaderCode.size();
+	shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(compiledShaderCode.data());
+	
+	VkShaderModule shaderModule;
+	VkResult result = vkCreateShaderModule(vulkanLogicalDevice, &shaderModuleCreateInfo, nullptr, &shaderModule);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create shader module!");
+	}
+	return shaderModule;
+}
+
+
+/// @brief Reads all the bytes from a specified file and return them in a byte array (vector).
+std::vector<char> Application::readFile(const std::string& fileName) {
+	// Benefit of starting at end of file is that we can immediately get the size and allocate a buffer accordingly
+	std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+
+	if (!file.is_open()) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to open file '" + fileName + "'.");
+	}
+	// File is now open..
+	// 
+	// Get the file size and create a buffer of that size
+	size_t fileSize = (size_t)file.tellg();
+	std::vector<char> buffer(fileSize);
+
+	// Read the contents of the whole file at once, into the buffer
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+
+	// Close the file
+	file.close();
+	return buffer;
 }
 
