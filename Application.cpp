@@ -401,7 +401,31 @@ void Application::createGraphicsPipeline() {
 	viewportStateCreateInfo.viewportCount = 1;
 	viewportStateCreateInfo.scissorCount = 1;
 
+	// Rasterizer info
+	VkPipelineRasterizationStateCreateInfo rasterizer{};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;  // Disable any output to the framebuffer (geometry never passes through the rasterizer)
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.lineWidth = 1.0f;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	// Vulkan uses the order of the vertices when projected on to the screen to determine front/back faces
+	// We're telling Vulkan what order (clockwise/anti-clockwise) must be treated as front face [OBJ, GLTF etc. use anti-clockwise]
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
+	rasterizer.depthBiasClamp = 0.0f; // Optional
+	rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
 
+	// Multisampling (Anti-Aliasing) - Disabled for now
+	VkPipelineMultisampleStateCreateInfo multisampling{};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.minSampleShading = 1.0f; // Optional
+	multisampling.pSampleMask = nullptr; // Optional
+	multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+	multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
 
 
