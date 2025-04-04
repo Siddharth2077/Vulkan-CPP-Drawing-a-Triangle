@@ -337,7 +337,7 @@ void Application::createGraphicsPipeline() {
 	auto vertShaderCode = readFile("shaders/vert.spv");
 	auto fragShaderCode = readFile("shaders/frag.spv");
 
-	// Create the shader modules from the compiled shader code
+	// Create the shader modules from the compiled shader code and assign them to their respective pipeline stages
 	VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
 	VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
@@ -354,6 +354,56 @@ void Application::createGraphicsPipeline() {
 	fragShaderStageInfo.pName = "main";  // the entry point of the shader code
 
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+	// Describing the vertex input to the Vulkan vertex shader
+	VkPipelineVertexInputStateCreateInfo vertexDataInputInfo{};
+	vertexDataInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexDataInputInfo.pVertexBindingDescriptions = nullptr;
+	vertexDataInputInfo.vertexBindingDescriptionCount = 0;
+	vertexDataInputInfo.pVertexBindingDescriptions = nullptr;
+	vertexDataInputInfo.vertexAttributeDescriptionCount = 0;
+		
+	// Input assembler creation description:
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo{};
+	inputAssemblyCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssemblyCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssemblyCreateInfo.primitiveRestartEnable = VK_FALSE;
+
+	// Viewport definition
+	VkViewport viewport{};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = (float)vulkanSwapChainExtent.width;
+	viewport.height = (float)vulkanSwapChainExtent.height;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	// Scissor definition (we'll just draw the entire framebuffer for now)
+	VkRect2D scissor{};
+	scissor.offset = { 0, 0 };
+	scissor.extent = vulkanSwapChainExtent;
+		
+	// Make certain parts of the pipeline dynamic [Viewport and Scissor]
+	std::vector<VkDynamicState> dynamicStates = {
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+	VkPipelineDynamicStateCreateInfo dynamicPipelineCreateInfo{};
+	dynamicPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicPipelineCreateInfo.pDynamicStates = dynamicStates.data();
+	dynamicPipelineCreateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+
+	// Telling Vulkan about our Viewports and Scissors (only mention the counts for a dynamic version of the two)
+	// If we need a static viewport and scissor (unlikely), just pass the reference to the viewport and scissor now
+	// Since we're using a dynamic viewport and scissor, we'll be passing them later using 'vkCmd' commands
+	VkPipelineViewportStateCreateInfo viewportStateCreateInfo{};
+	viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportStateCreateInfo.viewportCount = 1;
+	viewportStateCreateInfo.scissorCount = 1;
+
+
+
+
 
 }
 
