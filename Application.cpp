@@ -27,6 +27,7 @@ void Application::initVulkan() {
 	createLogicalDevice();
 	createSwapChain();
 	createSwapChainImageViews();
+	createRenderPass();
 	createGraphicsPipeline();
 }
 
@@ -37,7 +38,9 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+	vkDestroyPipeline(vulkanLogicalDevice, vulkanGraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(vulkanLogicalDevice, vulkanPipelineLayout, nullptr);
+	vkDestroyRenderPass(vulkanLogicalDevice, vulkanRenderPass, nullptr);
 	// Destroy the swapchain image-views
 	for (VkImageView imageView : vulkanSwapChainImageViews) {
 		vkDestroyImageView(vulkanLogicalDevice, imageView, nullptr);
@@ -333,6 +336,49 @@ void Application::createSwapChainImageViews() {
 	std::cout << "> Created image-views for swapchain images successfully.\n";
 }
 
+void Application::createRenderPass() {
+	// We'll just have one color buffer attachment for our framebuffer represented by one of the swapchain images
+	VkAttachmentDescription colorAttachment{};
+	colorAttachment.format = vulkanSwapChainImageFormat;
+	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;  // No MSAA (hence 1 sample per pixel)
+	// Color buffer load and store specification:
+	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	// We're not using the stencil buffer right now:
+	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	// Initial and Final states of the Images before and after the render pass
+	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;  // Images to be used for presentation in swap chain
+
+
+	VkAttachmentReference colorAttachmentRef{};
+	colorAttachmentRef.attachment = 0;
+	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	// Subpasses (We'll have only one subpass for now)
+	// There can be multiple subpasses when there's postprocessing needed, for example.
+	VkSubpassDescription subpass{};
+	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;  // Stating that this is a graphics subpass
+	subpass.pColorAttachments = &colorAttachmentRef;
+	subpass.colorAttachmentCount = 1;
+
+	// Render Pass creation
+	VkRenderPassCreateInfo renderPassCreateInfo{};
+	renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassCreateInfo.pAttachments = &colorAttachment;
+	renderPassCreateInfo.attachmentCount = 1;
+	renderPassCreateInfo.pSubpasses = &subpass;
+	renderPassCreateInfo.subpassCount = 1;
+
+	VkResult result = vkCreateRenderPass(vulkanLogicalDevice, &renderPassCreateInfo, nullptr, &vulkanRenderPass);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create render pass!");
+	}
+	std::cout << "> Created render pass successfully.\n";
+
+}
+
 void Application::createGraphicsPipeline() {
 	// Read in the compiled Vertex and Fragment shaders (Spir-V)
 	auto vertShaderCode = readFile("shaders/vert.spv");
@@ -457,6 +503,43 @@ void Application::createGraphicsPipeline() {
 	}
 	std::cout << "> Created pipeline layout successfully.\n";
 
+
+
+	// Specify how to create the Graphics Pipeline:
+	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
+	graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	graphicsPipelineCreateInfo.pStages = shaderStages;  // The vertex and fragment shader stages (array created above)
+	graphicsPipelineCreateInfo.stageCount = 2;
+	// Specifying each stage of the pipeline:
+	graphicsPipelineCreateInfo.pVertexInputState = &vertexDataInputInfo;
+	graphicsPipelineCreateInfo.pInputAssemblyState = &inputAssemblyCreateInfo;
+	graphicsPipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
+	graphicsPipelineCreateInfo.pRasterizationState = &rasterizer;
+	graphicsPipelineCreateInfo.pMultisampleState = &multisampling;
+	graphicsPipelineCreateInfo.pDepthStencilState = nullptr;
+	graphicsPipelineCreateInfo.pColorBlendState = &colorBlending;
+	graphicsPipelineCreateInfo.pDynamicState = &dynamicPipelineCreateInfo;
+	// Pipeline layout:
+	graphicsPipelineCreateInfo.layout = vulkanPipelineLayout;
+	// Render pass and Sub passes:
+	graphicsPipelineCreateInfo.renderPass = vulkanRenderPass;
+	graphicsPipelineCreateInfo.subpass = 0;
+	// Possible to derive a pipeline more efficienbtly from an existing pipeline (if they share a lot in common)
+	// We won't be using this feature here, since we have only one graphics pipeline
+	graphicsPipelineCreateInfo.basePipelineHandle = nullptr;
+	graphicsPipelineCreateInfo.basePipelineIndex = -1;
+
+	// Create the Graphics Pipeline:
+	result = vkCreateGraphicsPipelines(
+		vulkanLogicalDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &vulkanGraphicsPipeline
+	);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create Vulkan Graphics Pipeline!");
+	}
+	std::cout << "> Vulkan graphics pipeline created successfully.\n";
+
+	vkDestroyShaderModule(vulkanLogicalDevice, vertShaderModule, nullptr);
+	vkDestroyShaderModule(vulkanLogicalDevice, fragShaderModule, nullptr);
 }
 
 bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {

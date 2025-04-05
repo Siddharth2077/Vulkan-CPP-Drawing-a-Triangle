@@ -39,7 +39,9 @@ private:
 	VkFormat vulkanSwapChainImageFormat;
 	VkColorSpaceKHR vulkanSwapChainImageColorspace;
 	VkExtent2D vulkanSwapChainExtent;
+	VkRenderPass vulkanRenderPass = VK_NULL_HANDLE;
 	VkPipelineLayout vulkanPipelineLayout = VK_NULL_HANDLE;
+	VkPipeline vulkanGraphicsPipeline = VK_NULL_HANDLE;
 	std::vector<VkImage> vulkanSwapChainImages;
 	std::vector<VkImageView> vulkanSwapChainImageViews;
 	// Validation layers are now common for instance and devices:
@@ -73,6 +75,7 @@ private:
 	void createLogicalDevice();
 	void createSwapChain();
 	void createSwapChainImageViews();
+	void createRenderPass();
 	void createGraphicsPipeline();
 	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
