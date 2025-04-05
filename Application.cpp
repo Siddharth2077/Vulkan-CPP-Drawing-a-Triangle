@@ -37,6 +37,7 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+	vkDestroyPipelineLayout(vulkanLogicalDevice, vulkanPipelineLayout, nullptr);
 	// Destroy the swapchain image-views
 	for (VkImageView imageView : vulkanSwapChainImageViews) {
 		vkDestroyImageView(vulkanLogicalDevice, imageView, nullptr);
@@ -427,7 +428,34 @@ void Application::createGraphicsPipeline() {
 	multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
 	multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
+	// Color Blend attachment properties (per attached framebuffer)
+	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+	colorBlendAttachment.colorWriteMask = 
+		VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	// Opaque rendering (no color blending) - What this means is new colors simply overwrite the old colors of the frame buffer
+	colorBlendAttachment.blendEnable = VK_FALSE;
 
+	// Color Blending stage properties (global color blend settings)
+	VkPipelineColorBlendStateCreateInfo colorBlending{};
+	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.attachmentCount = 1;
+
+	// Defining the Pipeline layout (specifies the 'uniforms' (global shader variables) that can be changed at runtime)
+	// Creating an empty pipeline layout for now
+	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
+	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+	pipelineLayoutCreateInfo.setLayoutCount = 0;
+	pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+	pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+	// Create the pipeline layout
+	VkResult result = vkCreatePipelineLayout(vulkanLogicalDevice, &pipelineLayoutCreateInfo, nullptr, &vulkanPipelineLayout);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create pipeline layout!");
+	}
+	std::cout << "> Created pipeline layout successfully.\n";
 
 }
 

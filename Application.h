@@ -39,6 +39,7 @@ private:
 	VkFormat vulkanSwapChainImageFormat;
 	VkColorSpaceKHR vulkanSwapChainImageColorspace;
 	VkExtent2D vulkanSwapChainExtent;
+	VkPipelineLayout vulkanPipelineLayout = VK_NULL_HANDLE;
 	std::vector<VkImage> vulkanSwapChainImages;
 	std::vector<VkImageView> vulkanSwapChainImageViews;
 	// Validation layers are now common for instance and devices:
