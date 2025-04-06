@@ -13,10 +13,10 @@ void Application::initWindow() {
 	glfwInit();
 	// Defaults to OpenGL hence specifying no API
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	// Resizing windows in Vulkan requires extra steps
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	window = glfwCreateWindow(WIDTH, HEIGHT, APPLICATION_NAME, nullptr, nullptr);
+	glfwSetWindowUserPointer(window, this);
+	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 }
 
 void Application::initVulkan() {
@@ -30,7 +30,7 @@ void Application::initVulkan() {
 	createGraphicsPipeline();
 	createFramebuffers();
 	createCommandPool();
-	createCommandBuffer();
+	createCommandBuffers();
 	createSynchronizationObjects();
 }
 
@@ -44,28 +44,27 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
-	// Destroy synchronization objects
-	vkDestroySemaphore(vulkanLogicalDevice, imageAvailableSemaphore, nullptr);
-	vkDestroySemaphore(vulkanLogicalDevice, renderFinishedSemaphore, nullptr);
-	vkDestroyFence(vulkanLogicalDevice, inFlightFence, nullptr);
-	// Destroy command buffer pool
-	vkDestroyCommandPool(vulkanLogicalDevice, vulkanCommandPool, nullptr);
-	// Delete all the framebuffers
-	for (auto framebuffer : vulkanSwapChainFramebuffers) {
-		vkDestroyFramebuffer(vulkanLogicalDevice, framebuffer, nullptr);
-	}
+	cleanupSwapChain();
+
 	vkDestroyPipeline(vulkanLogicalDevice, vulkanGraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(vulkanLogicalDevice, vulkanPipelineLayout, nullptr);
+
 	vkDestroyRenderPass(vulkanLogicalDevice, vulkanRenderPass, nullptr);
-	// Destroy the swapchain image-views
-	for (VkImageView imageView : vulkanSwapChainImageViews) {
-		vkDestroyImageView(vulkanLogicalDevice, imageView, nullptr);
+
+	// Destroy synchronization objects
+	for (size_t i{ 0 }; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		vkDestroySemaphore(vulkanLogicalDevice, imageAvailableSemaphores.at(i), nullptr);
+		vkDestroySemaphore(vulkanLogicalDevice, renderFinishedSemaphores.at(i), nullptr);
+		vkDestroyFence(vulkanLogicalDevice, inFlightFences.at(i), nullptr);
 	}
-	vkDestroySwapchainKHR(vulkanLogicalDevice, vulkanSwapChain, nullptr);
+	// Destroy command buffer pool
+	vkDestroyCommandPool(vulkanLogicalDevice, vulkanCommandPool, nullptr);
+	
 	vkDestroyDevice(vulkanLogicalDevice, nullptr);
 	vkDestroySurfaceKHR(vulkanInstance, vulkanSurface, nullptr);
 	// Destroy Vulkan instance just before the program terminates
 	vkDestroyInstance(vulkanInstance, nullptr);
+
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
@@ -246,6 +245,38 @@ void Application::createLogicalDevice() {
 	vkGetDeviceQueue(vulkanLogicalDevice, queueFamilyIndices.presentationFamily.value(), 0, &devicePresentationQueue);
 	std::cout << "> Retrieved queue handles.\n";
 
+}
+
+void Application::recreateSwapChain() {
+	int width = 0;
+	int height = 0;
+	glfwGetFramebufferSize(window, &width, &height);
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(window, &width, &height);
+		glfwWaitEvents();
+	}
+
+	// Don't touch resources that may still be in use
+	vkDeviceWaitIdle(vulkanLogicalDevice);
+
+	cleanupSwapChain();
+
+	createSwapChain();
+	createSwapChainImageViews();
+	createFramebuffers();
+	std::cout << "> Recreated swapchain successfully.\n";
+}
+
+void Application::cleanupSwapChain() {
+	// Delete all the framebuffers
+	for (auto framebuffer : vulkanSwapChainFramebuffers) {
+		vkDestroyFramebuffer(vulkanLogicalDevice, framebuffer, nullptr);
+	}
+	// Destroy the swapchain image-views
+	for (VkImageView imageView : vulkanSwapChainImageViews) {
+		vkDestroyImageView(vulkanLogicalDevice, imageView, nullptr);
+	}
+	vkDestroySwapchainKHR(vulkanLogicalDevice, vulkanSwapChain, nullptr);
 }
 
 void Application::createSwapChain() {
@@ -796,7 +827,10 @@ void Application::createCommandPool() {
 	std::cout << "> Created Vulkan command pool successfully.\n";
 }
 
-void Application::createCommandBuffer() {
+void Application::createCommandBuffers() {
+
+	vulkanCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
 	// Specify how to allocate command buffers and from which command pool
 	/*
 		Note:
@@ -807,10 +841,10 @@ void Application::createCommandBuffer() {
 	commandBuffersAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	commandBuffersAllocateInfo.commandPool = vulkanCommandPool;
 	commandBuffersAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	commandBuffersAllocateInfo.commandBufferCount = 1;  // One Graphics command buffer for draw cmds
+	commandBuffersAllocateInfo.commandBufferCount = (uint32_t)vulkanCommandBuffers.size();
 
 	// Allocate the Command Buffer(s):
-	VkResult result = vkAllocateCommandBuffers(vulkanLogicalDevice, &commandBuffersAllocateInfo, &vulkanCommandBuffer);
+	VkResult result = vkAllocateCommandBuffers(vulkanLogicalDevice, &commandBuffersAllocateInfo, vulkanCommandBuffers.data());
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to allocate Command Buffers from Pool!\n");
 	}
@@ -827,7 +861,7 @@ void Application::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t sw
 	beginInfo.flags = 0;  // optional
 	beginInfo.pInheritanceInfo = nullptr;  // optional (only relevant for Secondary Command Buffers)
 
-	VkResult result = vkBeginCommandBuffer(vulkanCommandBuffer, &beginInfo);
+	VkResult result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to begin recording Command Buffer!");
 	}
@@ -844,10 +878,10 @@ void Application::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t sw
 	renderPassBeginInfo.clearValueCount = 1;
 
 	// Begin the render pass (commands will be embedded in the Primary command buffer itself. No usage of secondary cmd buffers)
-	vkCmdBeginRenderPass(vulkanCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	// Bind the Graphics Pipeline
-	vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanGraphicsPipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanGraphicsPipeline);
 
 	// We specified viewport and scissor state for this pipeline to be dynamic. 
 	// So we need to set them in the command buffer before issuing our draw command.
@@ -858,21 +892,21 @@ void Application::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t sw
 	viewport.maxDepth = 1.0f;
 	viewport.width = static_cast<float>(vulkanSwapChainExtent.width);
 	viewport.height = static_cast<float>(vulkanSwapChainExtent.height);
-	vkCmdSetViewport(vulkanCommandBuffer, 0, 1, &viewport);
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 	VkRect2D scissor{};
 	scissor.offset = { 0,0 };
 	scissor.extent = vulkanSwapChainExtent;
-	vkCmdSetScissor(vulkanCommandBuffer, 0, 1, &scissor);
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	// Issue the Draw command for the Triangle
-	vkCmdDraw(vulkanCommandBuffer, 3, 1, 0, 0);  // Use 1 for instanceCount if NOT using instanced rendering
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);  // Use 1 for instanceCount if NOT using instanced rendering
 
 	// End the Render Pass
-	vkCmdEndRenderPass(vulkanCommandBuffer);
+	vkCmdEndRenderPass(commandBuffer);
 
 	// Finished recording the Command Buffer:
-	result = vkEndCommandBuffer(vulkanCommandBuffer);
+	result = vkEndCommandBuffer(commandBuffer);
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to record Command Buffer!");
 	}
@@ -884,25 +918,30 @@ void Application::drawFrame() {
 
 	// At the start of the frame, we want to wait until the previous frame has finished, 
 	// so that the command buffer and semaphores are available to use.
-	vkWaitForFences(vulkanLogicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-
-	// After waiting, we need to manually reset the fence to the 'unisgnalled' state
-	vkResetFences(vulkanLogicalDevice, 1, &inFlightFence);
+	vkWaitForFences(vulkanLogicalDevice, 1, &inFlightFences.at(currentFrame), VK_TRUE, UINT64_MAX);
 
 	// Acquiring an image from the SwapChain
 	uint32_t swapChainImageIndex{};
-	VkResult result = vkAcquireNextImageKHR(vulkanLogicalDevice, vulkanSwapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &swapChainImageIndex);
-	if (result != VK_SUCCESS) {
+	VkResult result = vkAcquireNextImageKHR(vulkanLogicalDevice, vulkanSwapChain, UINT64_MAX, imageAvailableSemaphores.at(currentFrame), VK_NULL_HANDLE, &swapChainImageIndex);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+		recreateSwapChain();
+		return;
+	} 
+	else if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to acquire the next image from the swapchain!");
 	}
 
+	// Only reset the fence if we are submitting work (avoiding a potential Deadlock)
+	// After waiting, we need to manually reset the fence to the 'unisgnalled' state
+	vkResetFences(vulkanLogicalDevice, 1, &inFlightFences.at(currentFrame));
+
 	// Recording the Command Buffer
-	vkResetCommandBuffer(vulkanCommandBuffer, 0);
-	recordCommandBuffer(vulkanCommandBuffer, swapChainImageIndex);
+	vkResetCommandBuffer(vulkanCommandBuffers.at(currentFrame), 0);
+	recordCommandBuffer(vulkanCommandBuffers.at(currentFrame), swapChainImageIndex);
 
 	// Submit the command buffer:
-	VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };  // wait semaphores
-	VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };  // signal semaphores
+	VkSemaphore waitSemaphores[] = { imageAvailableSemaphores.at(currentFrame) };  // wait semaphores
+	VkSemaphore signalSemaphores[] = { renderFinishedSemaphores.at(currentFrame) };  // signal semaphores
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };  // pipeline wait stages
 
 	VkSubmitInfo commandBufferSubmitInfo{};  // command submit info
@@ -912,10 +951,10 @@ void Application::drawFrame() {
 	commandBufferSubmitInfo.pWaitSemaphores = waitSemaphores;
 	commandBufferSubmitInfo.pWaitDstStageMask = waitStages;
 	commandBufferSubmitInfo.pSignalSemaphores = signalSemaphores;
-	commandBufferSubmitInfo.pCommandBuffers = &vulkanCommandBuffer;
+	commandBufferSubmitInfo.pCommandBuffers = &vulkanCommandBuffers.at(currentFrame);
 	commandBufferSubmitInfo.commandBufferCount = 1;
 
-	result = vkQueueSubmit(deviceGraphicsQueue, 1, &commandBufferSubmitInfo, inFlightFence);
+	result = vkQueueSubmit(deviceGraphicsQueue, 1, &commandBufferSubmitInfo, inFlightFences.at(currentFrame));
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to submit draw command buffer to graphics queue!");
 	}
@@ -932,11 +971,25 @@ void Application::drawFrame() {
 	presentationInfo.pImageIndices = &swapChainImageIndex;
 	presentationInfo.pResults = nullptr; // optional: Allows specifying a VkResult array to check for success of presentation in each swapchain
 
-	vkQueuePresentKHR(devicePresentationQueue, &presentationInfo);
+	result = vkQueuePresentKHR(devicePresentationQueue, &presentationInfo);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || frameBufferResized) {
+		frameBufferResized = false;
+		recreateSwapChain();
+	}
+	else if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to present SwapChaim images to the Queue!");
+	}
+
+	// Increment the frame
+	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
 }
 
 void Application::createSynchronizationObjects() {
+
+	imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
 	VkSemaphoreCreateInfo semaphoreCreateInfo{};
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -945,39 +998,27 @@ void Application::createSynchronizationObjects() {
 	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // Creates the fence initialized to the signaled state (for the first drawFrame call)
 
-	// Create the Synchronization Objects
-	if (vkCreateSemaphore(vulkanLogicalDevice, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS) {
-		throw std::runtime_error("RUNTIME ERROR: Failed to create imageAvailableSemaphore!");
+	// Create the Synchronization Objects per frame
+	for (size_t i{ 0 }; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		if (vkCreateSemaphore(vulkanLogicalDevice, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores.at(i)) != VK_SUCCESS) {
+			throw std::runtime_error("RUNTIME ERROR: Failed to create 'imageAvailableSemaphore' for frame: " + i);
+		}
+		if (vkCreateSemaphore(vulkanLogicalDevice, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores.at(i)) != VK_SUCCESS) {
+			throw std::runtime_error("RUNTIME ERROR: Failed to create 'renderFinishedSemaphore' for frame: " + i);
+		}
+		if (vkCreateFence(vulkanLogicalDevice, &fenceCreateInfo, nullptr, &inFlightFences.at(i)) != VK_SUCCESS) {
+			throw std::runtime_error("RUNTIME ERROR: Failed to create 'inFlightFence' for frame: " + i);
+		}
 	}
-#ifdef NDEBUG 
-	// Release Mode:
-#else         
-	// Debug Mode:
-	std::cout << "DEBUG LOG: Created Vulkan synchronization object (semaphore): 'imageAvailableSemaphore' successfully.\n";
-#endif	
-
-	if (vkCreateSemaphore(vulkanLogicalDevice, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) {
-		throw std::runtime_error("RUNTIME ERROR: Failed to create renderFinishedSemaphore!");
-	}
-#ifdef NDEBUG 
-// Release Mode:
-#else         
-	// Debug Mode:
-	std::cout << "DEBUG LOG: Created Vulkan synchronization object (semaphore): 'renderFinishedSemaphore' successfully.\n";
-#endif
-
-	if (vkCreateFence(vulkanLogicalDevice, &fenceCreateInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
-		throw std::runtime_error("RUNTIME ERROR: Failed to create inFlightFence!");
-	}
-#ifdef NDEBUG 
-// Release Mode:
-#else         
-	// Debug Mode:
-	std::cout << "DEBUG LOG: Created Vulkan synchronization object (fence): 'inFlightFence' successfully.\n";
-#endif
 
 	std::cout << "> Created Vulkan synchronization objects successfully.\n";
 
+}
+
+/// @brief Callback used by GLFW when a window resize occurs (see 'initWindow' method).
+void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+	auto application = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+	application->frameBufferResized = true;
 }
 
 /// @brief Reads all the bytes from a specified file and return them in a byte array (vector).

@@ -30,6 +30,8 @@ private:
 	const char* APPLICATION_NAME = "Vulkan Application";
 
 	VkInstance vulkanInstance = VK_NULL_HANDLE;
+	const int MAX_FRAMES_IN_FLIGHT{ 2 };
+	uint32_t currentFrame{ 0 };
 	VkPhysicalDevice vulkanPhysicalDevice = VK_NULL_HANDLE;
 	VkDevice vulkanLogicalDevice = VK_NULL_HANDLE;
 	VkQueue deviceGraphicsQueue = VK_NULL_HANDLE;
@@ -43,14 +45,15 @@ private:
 	VkPipelineLayout vulkanPipelineLayout = VK_NULL_HANDLE;
 	VkPipeline vulkanGraphicsPipeline = VK_NULL_HANDLE;
 	VkCommandPool vulkanCommandPool = VK_NULL_HANDLE;
-	VkCommandBuffer vulkanCommandBuffer = VK_NULL_HANDLE;
+	std::vector<VkCommandBuffer> vulkanCommandBuffers;
 	std::vector<VkImage> vulkanSwapChainImages;
 	std::vector<VkImageView> vulkanSwapChainImageViews;
 	std::vector<VkFramebuffer> vulkanSwapChainFramebuffers;
 	// Synchronization objects:
-	VkSemaphore imageAvailableSemaphore;
-	VkSemaphore renderFinishedSemaphore;
-	VkFence inFlightFence;
+	std::vector<VkSemaphore> imageAvailableSemaphores;
+	std::vector <VkSemaphore> renderFinishedSemaphores;
+	std::vector<VkFence> inFlightFences;
+	bool frameBufferResized{ false };
 	// Validation layers are now common for instance and devices:
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
@@ -80,6 +83,8 @@ private:
 	void createVulkanSurface();
 	void pickVulkanPhysicalDevice();
 	void createLogicalDevice();
+	void recreateSwapChain();
+	void cleanupSwapChain();
 	void createSwapChain();
 	void createSwapChainImageViews();
 	void createRenderPass();
@@ -95,12 +100,13 @@ private:
 	bool checkPhysicalDeviceExtensionsSupport(VkPhysicalDevice physicalDevice);
 	VkShaderModule createShaderModule(const std::vector<char>& compiledShaderCode);
 	void createCommandPool();
-	void createCommandBuffer();
+	void createCommandBuffers();
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t swapChainImageIndex);
 	void createSynchronizationObjects();
 	void drawFrame();
 
 	// static methods:
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 	static std::vector<char> readFile(const std::string& fileName);
 
 };
