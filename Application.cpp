@@ -30,6 +30,7 @@ void Application::initVulkan() {
 	createRenderPass();
 	createGraphicsPipeline();
 	createFramebuffers();
+	createCommandPool();
 }
 
 void Application::mainLoop() {
@@ -39,6 +40,7 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+	vkDestroyCommandPool(vulkanLogicalDevice, vulkanCommandPool, nullptr);
 	// Delete all the framebuffers
 	for (auto framebuffer : vulkanSwapChainFramebuffers) {
 		vkDestroyFramebuffer(vulkanLogicalDevice, framebuffer, nullptr);
@@ -754,6 +756,64 @@ VkShaderModule Application::createShaderModule(const std::vector<char>& compiled
 }
 
 
+void Application::createCommandPool() {
+	// Fetch the queue families of the GPU
+	QueueFamilyIndices queueFamilies = findQueueFamilies(vulkanPhysicalDevice);
+
+	// Specify how to create the Command Pool
+	VkCommandPoolCreateInfo commandPoolCreateInfo{};
+	commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	// This flag provides more fine grain control over individual command buffer in this pool
+	commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	// Each command pool can only allocate command buffers that are submitted on a single type of queue (In this case Graphics queue for draw cmds)
+	commandPoolCreateInfo.queueFamilyIndex = queueFamilies.graphicsFamily.value();
+
+
+	// Create the Command Pool
+	VkResult result = vkCreateCommandPool(vulkanLogicalDevice, &commandPoolCreateInfo, nullptr, &vulkanCommandPool);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create Command Pool.");
+	}
+	std::cout << "> Created Vulkan command pool successfully.\n";
+}
+
+void Application::createCommandBuffer() {
+	// Specify how to allocate command buffers and from which command pool
+	/*
+		Note:
+		- VK_COMMAND_BUFFER_LEVEL_PRIMARY:		Can be submitted to a queue for execution, but cannot be called from other command buffers.
+		- VK_COMMAND_BUFFER_LEVEL_SECONDARY:	Cannot be submitted directly, but can be called from primary command buffers
+	*/
+	VkCommandBufferAllocateInfo commandBuffersAllocateInfo{};
+	commandBuffersAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	commandBuffersAllocateInfo.commandPool = vulkanCommandPool;
+	commandBuffersAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	commandBuffersAllocateInfo.commandBufferCount = 1;  // One Graphics command buffer for draw cmds
+
+	// Allocate the Command Buffer(s):
+	VkResult result = vkAllocateCommandBuffers(vulkanLogicalDevice, &commandBuffersAllocateInfo, &vulkanCommandBuffer);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to allocate Command Buffers from Pool!\n");
+	}
+	std::cout << "> Created Vulkan command buffers successfully.\n";
+
+}
+
+/// @brief Function that writes the commands we want to execute into a command buffer.
+/// @param commandBuffer: The command buffer (VkCommandBuffer object) that you want to write the command to.
+/// @param swapChainImageIndex: The index of the SwapChain image that you want to write to.
+void Application::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t swapChainImageIndex) {
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = 0;  // optional
+	beginInfo.pInheritanceInfo = nullptr;  // optional (only relevant for Secondary Command Buffers)
+
+	VkResult result = vkBeginCommandBuffer(vulkanCommandBuffer, &beginInfo);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to begin recording Command Buffer!");
+	}
+}
+
 /// @brief Reads all the bytes from a specified file and return them in a byte array (vector).
 std::vector<char> Application::readFile(const std::string& fileName) {
 	// Benefit of starting at end of file is that we can immediately get the size and allocate a buffer accordingly
@@ -776,4 +836,3 @@ std::vector<char> Application::readFile(const std::string& fileName) {
 	file.close();
 	return buffer;
 }
-

@@ -42,6 +42,8 @@ private:
 	VkRenderPass vulkanRenderPass = VK_NULL_HANDLE;
 	VkPipelineLayout vulkanPipelineLayout = VK_NULL_HANDLE;
 	VkPipeline vulkanGraphicsPipeline = VK_NULL_HANDLE;
+	VkCommandPool vulkanCommandPool = VK_NULL_HANDLE;
+	VkCommandBuffer vulkanCommandBuffer = VK_NULL_HANDLE;
 	std::vector<VkImage> vulkanSwapChainImages;
 	std::vector<VkImageView> vulkanSwapChainImageViews;
 	std::vector<VkFramebuffer> vulkanSwapChainFramebuffers;
@@ -88,6 +90,9 @@ private:
 	bool checkValidationLayersSupport();
 	bool checkPhysicalDeviceExtensionsSupport(VkPhysicalDevice physicalDevice);
 	VkShaderModule createShaderModule(const std::vector<char>& compiledShaderCode);
+	void createCommandPool();
+	void createCommandBuffer();
+	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t swapChainImageIndex);
 
 	// static methods:
 	static std::vector<char> readFile(const std::string& fileName);
