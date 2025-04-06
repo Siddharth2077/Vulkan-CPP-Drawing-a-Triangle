@@ -9,7 +9,6 @@ void Application::run() {
 	cleanup();
 }
 
-
 void Application::initWindow() {
 	glfwInit();
 	// Defaults to OpenGL hence specifying no API
