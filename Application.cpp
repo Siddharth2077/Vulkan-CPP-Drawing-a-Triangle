@@ -812,6 +812,52 @@ void Application::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t sw
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to begin recording Command Buffer!");
 	}
+
+	// Begin the Render Pass
+	VkRenderPassBeginInfo renderPassBeginInfo{};
+	renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassBeginInfo.renderPass = vulkanRenderPass;
+	renderPassBeginInfo.framebuffer = vulkanSwapChainFramebuffers.at(swapChainImageIndex);
+	renderPassBeginInfo.renderArea.offset = { 0,0 };
+	renderPassBeginInfo.renderArea.extent = vulkanSwapChainExtent;
+	VkClearValue clearValue = {{ {0.0f, 0.0f, 0.0f, 1.0f} }};  // Its drilling down 3 levels into nested unions to reach the array of floats
+	renderPassBeginInfo.pClearValues = &clearValue;  // Clear values to use for VK_ATTACHMENT_LOAD_OP_CLEAR (black in this case)
+	renderPassBeginInfo.clearValueCount = 1;
+
+	// Begin the render pass (commands will be embedded in the Primary command buffer itself. No usage of secondary cmd buffers)
+	vkCmdBeginRenderPass(vulkanCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	// Bind the Graphics Pipeline
+	vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanGraphicsPipeline);
+
+	// We specified viewport and scissor state for this pipeline to be dynamic. 
+	// So we need to set them in the command buffer before issuing our draw command.
+	VkViewport viewport{};
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+	viewport.width = static_cast<float>(vulkanSwapChainExtent.width);
+	viewport.height = static_cast<float>(vulkanSwapChainExtent.height);
+	vkCmdSetViewport(vulkanCommandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor{};
+	scissor.offset = { 0,0 };
+	scissor.extent = vulkanSwapChainExtent;
+	vkCmdSetScissor(vulkanCommandBuffer, 0, 1, &scissor);
+
+	// Issue the Draw command for the Triangle
+	vkCmdDraw(vulkanCommandBuffer, 3, 1, 0, 0);  // Use 1 for instanceCount if NOT using instanced rendering
+
+	// End the Render Pass
+	vkCmdEndRenderPass(vulkanCommandBuffer);
+
+	// Finished recording the Command Buffer:
+	result = vkEndCommandBuffer(vulkanCommandBuffer);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to record Command Buffer!");
+	}
+
 }
 
 /// @brief Reads all the bytes from a specified file and return them in a byte array (vector).
