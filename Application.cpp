@@ -31,15 +31,25 @@ void Application::initVulkan() {
 	createGraphicsPipeline();
 	createFramebuffers();
 	createCommandPool();
+	createCommandBuffer();
+	createSynchronizationObjects();
 }
 
 void Application::mainLoop() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+		drawFrame();
 	}
+	// Wait for the logical device to finish operations before destroying the window
+	vkDeviceWaitIdle(vulkanLogicalDevice);
 }
 
 void Application::cleanup() {
+	// Destroy synchronization objects
+	vkDestroySemaphore(vulkanLogicalDevice, imageAvailableSemaphore, nullptr);
+	vkDestroySemaphore(vulkanLogicalDevice, renderFinishedSemaphore, nullptr);
+	vkDestroyFence(vulkanLogicalDevice, inFlightFence, nullptr);
+	// Destroy command buffer pool
 	vkDestroyCommandPool(vulkanLogicalDevice, vulkanCommandPool, nullptr);
 	// Delete all the framebuffers
 	for (auto framebuffer : vulkanSwapChainFramebuffers) {
@@ -60,7 +70,6 @@ void Application::cleanup() {
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
-
 
 void Application::createVulkanInstance() {
 	// Check if validation layers were enabled. If so, check if they're all supported
@@ -370,6 +379,16 @@ void Application::createRenderPass() {
 	subpass.pColorAttachments = &colorAttachmentRef;
 	subpass.colorAttachmentCount = 1;
 
+	// Subpass Dependency management:
+	VkSubpassDependency subpassDependency{};
+	subpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+	subpassDependency.dstSubpass = 0;
+	subpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	subpassDependency.srcAccessMask = 0;
+	subpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	subpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+
 	// Render Pass creation
 	VkRenderPassCreateInfo renderPassCreateInfo{};
 	renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -377,6 +396,8 @@ void Application::createRenderPass() {
 	renderPassCreateInfo.attachmentCount = 1;
 	renderPassCreateInfo.pSubpasses = &subpass;
 	renderPassCreateInfo.subpassCount = 1;
+	renderPassCreateInfo.pDependencies = &subpassDependency;
+	renderPassCreateInfo.dependencyCount = 1;
 
 	VkResult result = vkCreateRenderPass(vulkanLogicalDevice, &renderPassCreateInfo, nullptr, &vulkanRenderPass);
 	if (result != VK_SUCCESS) {
@@ -572,7 +593,7 @@ void Application::createFramebuffers() {
 		if (result != VK_SUCCESS) {
 			throw std::runtime_error("RUNTIME ERROR: Failed to create Framebuffers!");
 		}
-		std::cout << "> Created Vulkan SwapChain Framebuffers successfully.\n";
+		std::cout << "> Created Vulkan swapchain framebuffer for view " << i << " successfully.\n";
 
 	}
 }
@@ -755,7 +776,6 @@ VkShaderModule Application::createShaderModule(const std::vector<char>& compiled
 	return shaderModule;
 }
 
-
 void Application::createCommandPool() {
 	// Fetch the queue families of the GPU
 	QueueFamilyIndices queueFamilies = findQueueFamilies(vulkanPhysicalDevice);
@@ -857,6 +877,107 @@ void Application::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t sw
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to record Command Buffer!");
 	}
+
+}
+
+/// @brief The render loop.
+void Application::drawFrame() {
+
+	// At the start of the frame, we want to wait until the previous frame has finished, 
+	// so that the command buffer and semaphores are available to use.
+	vkWaitForFences(vulkanLogicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+
+	// After waiting, we need to manually reset the fence to the 'unisgnalled' state
+	vkResetFences(vulkanLogicalDevice, 1, &inFlightFence);
+
+	// Acquiring an image from the SwapChain
+	uint32_t swapChainImageIndex{};
+	VkResult result = vkAcquireNextImageKHR(vulkanLogicalDevice, vulkanSwapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &swapChainImageIndex);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to acquire the next image from the swapchain!");
+	}
+
+	// Recording the Command Buffer
+	vkResetCommandBuffer(vulkanCommandBuffer, 0);
+	recordCommandBuffer(vulkanCommandBuffer, swapChainImageIndex);
+
+	// Submit the command buffer:
+	VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };  // wait semaphores
+	VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };  // signal semaphores
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };  // pipeline wait stages
+
+	VkSubmitInfo commandBufferSubmitInfo{};  // command submit info
+	commandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	commandBufferSubmitInfo.waitSemaphoreCount = 1;
+	commandBufferSubmitInfo.signalSemaphoreCount = 1;
+	commandBufferSubmitInfo.pWaitSemaphores = waitSemaphores;
+	commandBufferSubmitInfo.pWaitDstStageMask = waitStages;
+	commandBufferSubmitInfo.pSignalSemaphores = signalSemaphores;
+	commandBufferSubmitInfo.pCommandBuffers = &vulkanCommandBuffer;
+	commandBufferSubmitInfo.commandBufferCount = 1;
+
+	result = vkQueueSubmit(deviceGraphicsQueue, 1, &commandBufferSubmitInfo, inFlightFence);
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to submit draw command buffer to graphics queue!");
+	}
+
+	// Presentation
+	VkSwapchainKHR swapChains[] = { vulkanSwapChain };
+
+	VkPresentInfoKHR presentationInfo{};
+	presentationInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentationInfo.pWaitSemaphores = signalSemaphores;
+	presentationInfo.waitSemaphoreCount = 1;
+	presentationInfo.pSwapchains = swapChains;
+	presentationInfo.swapchainCount = 1;  // Will almost always be only 1
+	presentationInfo.pImageIndices = &swapChainImageIndex;
+	presentationInfo.pResults = nullptr; // optional: Allows specifying a VkResult array to check for success of presentation in each swapchain
+
+	vkQueuePresentKHR(devicePresentationQueue, &presentationInfo);
+
+}
+
+void Application::createSynchronizationObjects() {
+
+	VkSemaphoreCreateInfo semaphoreCreateInfo{};
+	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	
+	VkFenceCreateInfo fenceCreateInfo{};
+	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // Creates the fence initialized to the signaled state (for the first drawFrame call)
+
+	// Create the Synchronization Objects
+	if (vkCreateSemaphore(vulkanLogicalDevice, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create imageAvailableSemaphore!");
+	}
+#ifdef NDEBUG 
+	// Release Mode:
+#else         
+	// Debug Mode:
+	std::cout << "DEBUG LOG: Created Vulkan synchronization object (semaphore): 'imageAvailableSemaphore' successfully.\n";
+#endif	
+
+	if (vkCreateSemaphore(vulkanLogicalDevice, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create renderFinishedSemaphore!");
+	}
+#ifdef NDEBUG 
+// Release Mode:
+#else         
+	// Debug Mode:
+	std::cout << "DEBUG LOG: Created Vulkan synchronization object (semaphore): 'renderFinishedSemaphore' successfully.\n";
+#endif
+
+	if (vkCreateFence(vulkanLogicalDevice, &fenceCreateInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
+		throw std::runtime_error("RUNTIME ERROR: Failed to create inFlightFence!");
+	}
+#ifdef NDEBUG 
+// Release Mode:
+#else         
+	// Debug Mode:
+	std::cout << "DEBUG LOG: Created Vulkan synchronization object (fence): 'inFlightFence' successfully.\n";
+#endif
+
+	std::cout << "> Created Vulkan synchronization objects successfully.\n";
 
 }
 

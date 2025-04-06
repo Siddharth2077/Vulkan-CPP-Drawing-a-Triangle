@@ -47,6 +47,10 @@ private:
 	std::vector<VkImage> vulkanSwapChainImages;
 	std::vector<VkImageView> vulkanSwapChainImageViews;
 	std::vector<VkFramebuffer> vulkanSwapChainFramebuffers;
+	// Synchronization objects:
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore renderFinishedSemaphore;
+	VkFence inFlightFence;
 	// Validation layers are now common for instance and devices:
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
@@ -93,6 +97,8 @@ private:
 	void createCommandPool();
 	void createCommandBuffer();
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t swapChainImageIndex);
+	void createSynchronizationObjects();
+	void drawFrame();
 
 	// static methods:
 	static std::vector<char> readFile(const std::string& fileName);
