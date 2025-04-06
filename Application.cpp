@@ -923,11 +923,11 @@ void Application::drawFrame() {
 	// Acquiring an image from the SwapChain
 	uint32_t swapChainImageIndex{};
 	VkResult result = vkAcquireNextImageKHR(vulkanLogicalDevice, vulkanSwapChain, UINT64_MAX, imageAvailableSemaphores.at(currentFrame), VK_NULL_HANDLE, &swapChainImageIndex);
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		recreateSwapChain();
 		return;
 	} 
-	else if (result != VK_SUCCESS) {
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 		throw std::runtime_error("RUNTIME ERROR: Failed to acquire the next image from the swapchain!");
 	}
 
