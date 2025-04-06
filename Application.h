@@ -44,6 +44,7 @@ private:
 	VkPipeline vulkanGraphicsPipeline = VK_NULL_HANDLE;
 	std::vector<VkImage> vulkanSwapChainImages;
 	std::vector<VkImageView> vulkanSwapChainImageViews;
+	std::vector<VkFramebuffer> vulkanSwapChainFramebuffers;
 	// Validation layers are now common for instance and devices:
 	const std::vector<const char*> vulkanValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
@@ -77,6 +78,7 @@ private:
 	void createSwapChainImageViews();
 	void createRenderPass();
 	void createGraphicsPipeline();
+	void createFramebuffers();
 	bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice);
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice);
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice physicalDevice);

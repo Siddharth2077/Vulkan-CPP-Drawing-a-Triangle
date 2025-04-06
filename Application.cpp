@@ -29,6 +29,7 @@ void Application::initVulkan() {
 	createSwapChainImageViews();
 	createRenderPass();
 	createGraphicsPipeline();
+	createFramebuffers();
 }
 
 void Application::mainLoop() {
@@ -38,6 +39,10 @@ void Application::mainLoop() {
 }
 
 void Application::cleanup() {
+	// Delete all the framebuffers
+	for (auto framebuffer : vulkanSwapChainFramebuffers) {
+		vkDestroyFramebuffer(vulkanLogicalDevice, framebuffer, nullptr);
+	}
 	vkDestroyPipeline(vulkanLogicalDevice, vulkanGraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(vulkanLogicalDevice, vulkanPipelineLayout, nullptr);
 	vkDestroyRenderPass(vulkanLogicalDevice, vulkanRenderPass, nullptr);
@@ -504,7 +509,6 @@ void Application::createGraphicsPipeline() {
 	std::cout << "> Created pipeline layout successfully.\n";
 
 
-
 	// Specify how to create the Graphics Pipeline:
 	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
 	graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -540,6 +544,35 @@ void Application::createGraphicsPipeline() {
 
 	vkDestroyShaderModule(vulkanLogicalDevice, vertShaderModule, nullptr);
 	vkDestroyShaderModule(vulkanLogicalDevice, fragShaderModule, nullptr);
+}
+
+void Application::createFramebuffers() {
+	// Each framebuffer wraps a SwapChain image view
+	vulkanSwapChainFramebuffers.resize(vulkanSwapChainImageViews.size());
+
+	for (size_t i{ 0 }; i < vulkanSwapChainImageViews.size(); i++) {
+		VkImageView framebufferAttachments[] = {
+			// We're only attaching the Color attachment for now 
+			// Can have Depth, Stencil and Resolve[MSAA] in the future per framebuffer
+			vulkanSwapChainImageViews[i]
+		};
+
+		VkFramebufferCreateInfo framebufferCreateInfo{};
+		framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebufferCreateInfo.renderPass = vulkanRenderPass;
+		framebufferCreateInfo.pAttachments = framebufferAttachments;
+		framebufferCreateInfo.attachmentCount = 1;  // Only Color attachment for now
+		framebufferCreateInfo.width = vulkanSwapChainExtent.width;
+		framebufferCreateInfo.height = vulkanSwapChainExtent.height;
+		framebufferCreateInfo.layers = 1;  // 2D Images (Will be > 1 for Stereoscopic 3D)
+
+		VkResult result = vkCreateFramebuffer(vulkanLogicalDevice, &framebufferCreateInfo, nullptr, &vulkanSwapChainFramebuffers.at(i));
+		if (result != VK_SUCCESS) {
+			throw std::runtime_error("RUNTIME ERROR: Failed to create Framebuffers!");
+		}
+		std::cout << "> Created Vulkan SwapChain Framebuffers successfully.\n";
+
+	}
 }
 
 bool Application::isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice) {
